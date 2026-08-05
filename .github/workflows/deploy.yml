@@ -1,0 +1,61 @@
+name: Deploy
+
+# Vercel's GitHub integration deploys on every push, independent of ci.yml —
+# `next build` catches type and lint errors (neither is disabled in
+# next.config.ts), but not a failing Prettier check, a failing Vitest test, or
+# a failing Playwright flow. Without this workflow, any of those could still
+# reach the live demo while the CI badge on the README goes red.
+#
+# vercel.json disables Vercel's automatic deploy for `main`
+# (git.deploymentEnabled.main: false); this workflow deploys instead, and only
+# once CI has actually passed.
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+
+permissions:
+  contents: read
+
+# Two pushes close together start two independent CI runs, which can finish in
+# either order. Without this, a slow CI run for an OLDER commit could deploy
+# after a fast run for a NEWER one — silently rolling the live site backward.
+# One shared group with cancel-in-progress means a newer deploy starting
+# cancels an older one still in flight, so the latest commit always wins
+# regardless of how the two CI runs happened to finish.
+concurrency:
+  group: production-deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    # workflow_run always runs off the workflow file on the default branch,
+    # even for a run that was itself triggered from a PR branch or a fork —
+    # so this condition is the only thing standing between a stranger's PR
+    # and a production deploy. All three checks matter:
+    #   conclusion == 'success'   — CI actually passed, not just finished
+    #   head_branch == 'main'     — the push that ran CI was to main
+    #   head_repository == here   — not a fork's push to its own "main"
+    if: >
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    environment: production
+    env:
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+    steps:
+      # Deploy the exact commit CI passed, not main's HEAD at deploy time —
+      # another push could have landed on main in the time CI took to run.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - run: npm install --global vercel@latest
+
+      - run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+
+      - run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+
+      - run: vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
