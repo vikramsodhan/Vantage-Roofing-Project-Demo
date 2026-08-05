@@ -15,15 +15,25 @@ import { z } from "zod"
 
 import { requireRole, type ServerActionResult } from "@/lib/actions"
 import { isOwner } from "@/lib/authorization/roles"
+import { canModifyAccount } from "@/lib/authorization/userPermissions"
 import { createClient } from "@/lib/supabase/server"
 import { insertWorkType } from "@/lib/workTypes"
 import type { Role } from "@/types"
 
 const ROLE_VALUES = ["salesperson", "manager", "owner"] as const satisfies readonly Role[]
 
+// UserTable disables both controls on the caller's own row, but that is
+// presentation: a server action is an endpoint, and a disabled <Switch> doesn't
+// stop anyone invoking it directly. These are the checks that hold.
+const SELF_MUTATION_ERROR = "You can't change your own role or account status."
+
 export async function updateRole(userId: string, role: Role): Promise<ServerActionResult> {
   const auth = await requireRole(isOwner, "Only owners can perform this action.")
   if (!auth.ok) return auth.result
+
+  if (!canModifyAccount(auth.profile, userId)) {
+    return { success: false, error: SELF_MUTATION_ERROR }
+  }
 
   const validated = z.enum(ROLE_VALUES).safeParse(role)
   if (!validated.success) {
@@ -44,6 +54,10 @@ export async function updateRole(userId: string, role: Role): Promise<ServerActi
 export async function toggleActive(userId: string, isActive: boolean): Promise<ServerActionResult> {
   const auth = await requireRole(isOwner, "Only owners can perform this action.")
   if (!auth.ok) return auth.result
+
+  if (!canModifyAccount(auth.profile, userId)) {
+    return { success: false, error: SELF_MUTATION_ERROR }
+  }
 
   const supabase = await createClient()
   const { error } = await supabase.from("profiles").update({ is_active: isActive }).eq("id", userId)
