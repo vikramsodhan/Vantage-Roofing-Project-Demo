@@ -38,10 +38,30 @@ users away from `/login`/`/auth`. **Deactivation is not handled here** — the p
 in the `(app)` group layout: it signs out and redirects any user whose profile has
 `is_active = false`, on their next request after being deactivated.
 
-**Dev login** is an email/password form gated by `NEXT_PUBLIC_DEV_MODE=true`, additionally
-hard-gated off `NODE_ENV !== "production"` so it can never appear in a production build
-regardless of how the flag is set on Vercel. It signs in directly with `signInWithPassword` and
-never touches `/auth/callback` — that route is reached only via a Google OAuth redirect.
+**Demo login** exists because production authenticates through the client's Google Workspace,
+which no visitor to a public demo can hold an account on. Gated by `NEXT_PUBLIC_DEMO_MODE=true`,
+it replaces the entry point with one button per role and signs in as the matching seeded account.
+
+It runs in a server action rather than the browser so the shared password stays in
+`DEMO_PASSWORD` — deliberately without a `NEXT_PUBLIC_` prefix — instead of being compiled into
+the client bundle. The action re-checks the flag and validates the role itself: a server action
+is a public endpoint, so neither the caller nor the build config can be trusted to have done it.
+
+Offering all three roles is a deliberate demo decision. The permission model is the most
+substantial thing in the app — nav gating, page redirects, server-side role checks, and RLS —
+and none of it is observable to someone who only ever sees the owner view.
+
+**Dev login** is a separate email/password form gated by `NEXT_PUBLIC_DEV_MODE=true`, additionally
+hard-gated off `NODE_ENV !== "production"` so it can never appear in a production build regardless
+of how the flag is set on Vercel. It signs in from the browser with `signInWithPassword`, and the
+e2e suite drives it to sign in as any seeded account — not just the three the demo exposes.
+
+The two exist side by side because they answer different questions. Dev login is a local tool that
+must never ship; demo login is a production feature that must. Collapsing them would mean either
+deleting the `NODE_ENV` gate — a real security property — or restricting the tests to three
+accounts.
+
+Neither path touches `/auth/callback`; that route is reached only via a Google OAuth redirect.
 
 ## Server actions over API routes
 

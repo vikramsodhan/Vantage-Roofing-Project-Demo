@@ -52,7 +52,8 @@ src/
         _components/             YearEndPlanClient, PlanStatFields
     login/
       page.tsx
-      LoginPageClient.tsx        Google OAuth button (hd=NEXT_PUBLIC_ALLOWED_DOMAIN) + dev login
+      LoginPageClient.tsx        Google OAuth button (hd=NEXT_PUBLIC_ALLOWED_DOMAIN) + demo roles
+      actions.ts                 enterDemo — server-side sign-in for the demo
     auth/callback/route.ts       OAuth code exchange + domain check + first-login profile creation
     page.tsx                     redirects to /dashboard
     layout.tsx
@@ -262,10 +263,10 @@ cn(...inputs: ClassValue[]): string            // clsx + tailwind-merge
 3. Redirect to `/dashboard`. From here every `(app)` route is guarded by `requireActiveProfile()` in the group layout.
 4. **Deactivation**: an owner sets `is_active = false`. On the deactivated user's next request, `requireActiveProfile()` calls `supabase.auth.signOut()` and redirects to `/login?reason=deactivated`.
 
-`/auth/callback` is reached **only** via a Google OAuth redirect. The dev login form
-(`NEXT_PUBLIC_DEV_MODE=true`, hard-gated off `NODE_ENV`) signs in directly with
-`signInWithPassword` and never touches this route. See [DESIGN.md](DESIGN.md) for the two-layer
-domain check rationale.
+`/auth/callback` is reached **only** via a Google OAuth redirect. Demo sign-in
+(`NEXT_PUBLIC_DEMO_MODE=true`) goes through the `enterDemo` server action, which calls
+`signInWithPassword` for the seeded account matching the chosen role and never touches this
+route. See [DESIGN.md](DESIGN.md) for the two-layer domain check rationale.
 
 ### Proxy (`src/proxy.ts`)
 
@@ -327,6 +328,8 @@ git-ignored `scripts/.env.local` — see `scripts/.env.example`).
 - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
 - `NEXT_PUBLIC_ALLOWED_DOMAIN` — used by the callback server check
 - `NEXT_PUBLIC_DEV_MODE` — enables the dev email/password login form (also hard-gated off `NODE_ENV`)
+- `NEXT_PUBLIC_DEMO_MODE` — demo role buttons + fabricated-data banner (demo deployment only)
+- `DEMO_PASSWORD` — **not** `NEXT_PUBLIC_`; server-only, read by the `enterDemo` action
 - `NEXT_PUBLIC_MAPBOX_TOKEN`
 
 See [.env.example](../.env.example) for the app and [scripts/.env.example](../scripts/.env.example) for

@@ -8,7 +8,10 @@ import { BrandLogo } from "@/components/custom"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { DEMO_ROLES, type DemoRole, IS_DEMO_MODE } from "@/lib/demo"
 import { createClient } from "@/lib/supabase/client"
+
+import { enterDemo } from "./actions"
 
 // Gates the dev email/password form only. Hard-gated to non-production:
 // NODE_ENV is "production" on every Vercel deploy, so the form is eliminated
@@ -20,9 +23,14 @@ const IS_DEV_MODE =
 /**
  * Google-only login, restricted via the `hd` param (client) and a
  * server-side domain re-check (auth/callback) — hd alone isn't real
- * enforcement since it's client-controlled. The dev email/password form
- * is hard-gated off NODE_ENV, not just NEXT_PUBLIC_DEV_MODE, so it can't
- * reach production. See docs/DESIGN.md: "Auth & session model".
+ * enforcement since it's client-controlled. The dev email/password form is
+ * hard-gated off NODE_ENV, not just NEXT_PUBLIC_DEV_MODE, so it can't reach
+ * production.
+ *
+ * On the demo deployment (IS_DEMO_MODE) the Google button is shown but
+ * disabled — it documents how production authenticates, which no visitor can
+ * do — and entry is via the role buttons instead.
+ * See docs/DESIGN.md: "Auth & session model".
  */
 export default function LoginPage() {
   const searchParams = useSearchParams()
@@ -39,6 +47,28 @@ export default function LoginPage() {
   const [devPassword, setDevPassword] = useState("")
   const [devLoading, setDevLoading] = useState(false)
   const [devError, setDevError] = useState<string | null>(null)
+
+  // Demo entry state. `demoRole` doubles as the per-button spinner flag, so
+  // only the clicked role shows one.
+  const [demoRole, setDemoRole] = useState<DemoRole | null>(null)
+  const [demoError, setDemoError] = useState<string | null>(null)
+
+  async function handleEnterDemo(role: DemoRole) {
+    setDemoRole(role)
+    setDemoError(null)
+
+    // The session cookie is written server-side, so there's nothing to persist
+    // here — just navigate and let the proxy pick the session up.
+    const result = await enterDemo(role)
+
+    if (!result.success) {
+      setDemoError(result.error)
+      setDemoRole(null)
+      return
+    }
+
+    router.push("/")
+  }
 
   async function handleGoogleLogin() {
     setOAuthLoading(true)
@@ -128,9 +158,58 @@ export default function LoginPage() {
               <span className="leading-snug">{oAutherror}</span>
             </div>
           )}
+          {/* Demo entry. Listed first and styled as the primary action: on the
+              public demo this is the only route in, and Google below it is an
+              exhibit rather than a working option. */}
+          {IS_DEMO_MODE && (
+            <>
+              {demoError && (
+                <div className="flex items-start gap-2 rounded-md border border-destructive/20 bg-destructive/10 px-3 py-2.5 text-sm text-destructive">
+                  <AlertCircle className="size-4 shrink-0 mt-0.5" />
+                  <span className="leading-snug">{demoError}</span>
+                </div>
+              )}
+              <div className="space-y-2">
+                <p className="text-xs text-center text-muted-foreground">
+                  Explore with sample data — pick a role to see how access differs.
+                </p>
+                {DEMO_ROLES.map(({ role, label, blurb }) => (
+                  <Button
+                    key={role}
+                    onClick={() => handleEnterDemo(role)}
+                    disabled={demoRole !== null}
+                    variant="secondary"
+                    // h-auto + flex-col + whitespace-normal override the base
+                    // button's fixed height and single-line layout, so the
+                    // blurb can sit inside the target it describes.
+                    className="w-full h-auto flex-col gap-0.5 whitespace-normal px-3 py-2.5 text-center"
+                  >
+                    <span className="flex items-center gap-2">
+                      {demoRole === role && <Loader2 className="size-4 animate-spin" />}
+                      {demoRole === role ? "Entering…" : `Enter as ${label}`}
+                    </span>
+                    <span className="text-[11px] leading-snug font-normal opacity-75">{blurb}</span>
+                  </Button>
+                ))}
+              </div>
+
+              <div className="relative my-2">
+                <div className="absolute inset-0 flex items-center">
+                  <span className="w-full border-t" />
+                </div>
+                <div className="relative flex justify-center text-xs">
+                  <span className="bg-card px-2 text-muted-foreground">How production works</span>
+                </div>
+              </div>
+            </>
+          )}
+
           <Button
             onClick={handleGoogleLogin}
-            disabled={oAuthloading}
+            // On the demo this button is documentation, not a control: the real
+            // app signs in through the client's Google Workspace, which no
+            // visitor can authenticate against. Disabled beats a dead-end click.
+            disabled={oAuthloading || IS_DEMO_MODE}
             variant="outline"
             className="w-full h-11"
           >
@@ -159,11 +238,20 @@ export default function LoginPage() {
             {oAuthloading ? "Signing in…" : "Sign in with Google"}
           </Button>
           <p className="text-xs text-center text-muted-foreground">
-            Access restricted to{" "}
-            <span className="font-medium text-foreground">
-              {process.env.NEXT_PUBLIC_ALLOWED_DOMAIN}
-            </span>{" "}
-            accounts
+            {IS_DEMO_MODE ? (
+              <>
+                In production, sign-in is Google Workspace SSO restricted to the company domain.
+                Disabled here — no visitor can hold an account on it.
+              </>
+            ) : (
+              <>
+                Access restricted to{" "}
+                <span className="font-medium text-foreground">
+                  {process.env.NEXT_PUBLIC_ALLOWED_DOMAIN}
+                </span>{" "}
+                accounts
+              </>
+            )}
           </p>
           {/* Dev-only email/password form — never visible in production */}
           {IS_DEV_MODE && (
