@@ -316,7 +316,12 @@ From [CLAUDE.md](../CLAUDE.md), with details:
 - `.github/workflows/ci.yml` — on every PR and push to `main`: `lint`, `typecheck`,
   `format:check`, `test`, `build` in one job; a second job boots local Supabase and runs
   `test:e2e`.
-- Deploys are handled by Vercel's GitHub integration, which builds and promotes `main`.
+- `.github/workflows/deploy.yml` — deploys to Vercel only once `ci.yml` has passed on `main`.
+  Vercel's own automatic git deploy is turned off in `vercel.json`; this workflow fires on
+  `ci.yml`'s `workflow_run` completion, checks the run's conclusion, branch, and source repo,
+  then deploys the exact commit CI passed — not `main`'s HEAD at deploy time — via the Vercel
+  CLI. A `concurrency` group ensures a slow deploy for an older commit can't finish after a
+  newer one and roll the live site backward.
 - `.github/workflows/demo-reseed.yml` — nightly (plus manual dispatch) `npm run demo:reset`,
   restoring the public demo's jobs, reference data, and profile roles after visitors change
   them. Preserves `auth.users`, so live sessions survive a reset.

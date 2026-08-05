@@ -174,8 +174,10 @@ This is a public snapshot of a production application, deployed against a throwa
 **Every job, name, address, and dollar figure is randomly generated** — no real customer or business
 data appears anywhere in this repository or its history. Published with the client's permission.
 
-Some of the production setup is deliberately not part of this snapshot: the deploy pipeline, the
-operational runbooks, and a nightly database backup job that commits logical dumps to a separate
-private repository.
+This demo's deploy pipeline ([`deploy.yml`](.github/workflows/deploy.yml)) follows the same idea
+production uses — nothing deploys until [`ci.yml`](.github/workflows/ci.yml) has actually passed —
+implemented separately here rather than shared. Some of the production setup is deliberately not
+part of this snapshot, though: the operational handover runbook, and a nightly database backup job
+that commits logical dumps to a separate private repository.
 
 The demo resets nightly, so feel free to change things.
