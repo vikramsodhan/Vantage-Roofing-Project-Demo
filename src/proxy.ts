@@ -47,6 +47,10 @@ export async function proxy(request: NextRequest) {
 }
 
 // Skip static assets (_next bundles, favicon, images) — no auth check needed.
+// robots.txt is excluded too: it must stay readable by crawlers, and without
+// this the auth guard redirects it to /login, leaving the file unreachable.
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)"],
+  matcher: [
+    "/((?!_next/static|_next/image|favicon.ico|robots.txt|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+  ],
 }

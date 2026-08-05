@@ -17,6 +17,11 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Vantage Roofing",
   description: "Vantage Roofing job tracking app",
+  // This deployment is a public portfolio demo holding fabricated data under a
+  // real company's name, so it must stay out of search results. Inherited by
+  // every route, since none override `robots`. See app/robots.ts for why the
+  // accompanying robots.txt deliberately allows crawling.
+  robots: { index: false, follow: false },
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
