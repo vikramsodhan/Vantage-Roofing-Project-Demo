@@ -41,7 +41,10 @@ test("a created job appears in the jobs table", async ({ page }) => {
   // On success the app redirects to the new job's detail page. Exclude "new"
   // so this doesn't match the form page itself while the save is still pending.
   await page.waitForURL(/\/jobs\/(?!new$)[^/]+$/)
-  await expect(page.getByText(address)).toBeVisible()
+  // getByRole, not getByText: Next.js's route announcer (a hidden a11y live
+  // region) briefly duplicates the heading text into the DOM after navigation,
+  // so a bare text match races it and intermittently resolves to two elements.
+  await expect(page.getByRole("heading", { name: address })).toBeVisible()
 
   // The job shows up in the jobs table (found via the address search filter).
   await page.goto(`/jobs?address=${encodeURIComponent(token)}`)
