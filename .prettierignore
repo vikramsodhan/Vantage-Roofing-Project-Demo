@@ -4,3 +4,10 @@ build/
 node_modules/
 src/types/database.types.ts
 package-lock.json
+
+# Supabase CLI local state, written by `supabase link` / `supabase start`.
+# Gitignored, but Prettier reads this file rather than .gitignore, so without
+# it `format:check` fails locally for anyone who has linked a project while
+# CI (a fresh checkout, no .temp/) stays green.
+supabase/.temp/
+supabase/.branches/
