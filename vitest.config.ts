@@ -13,7 +13,9 @@ export default defineConfig({
     // environment is all we need.
     environment: "node",
     // Co-locate tests next to the code they cover: foo.ts → foo.test.ts.
-    include: ["src/**/*.test.ts"],
+    // scripts/ is included for the demo dataset's drift test, which guards
+    // scripts/demoData.ts against supabase/seed.sql.
+    include: ["src/**/*.test.ts", "scripts/**/*.test.ts"],
     // Set dummy env vars for tests so imports of lib/env.ts don't throw.
     // Tests don't call Supabase; these values just allow the module imports to succeed.
     env: {

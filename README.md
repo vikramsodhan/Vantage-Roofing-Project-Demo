@@ -39,19 +39,20 @@ npm run dev
 
 ## Commands
 
-| Command                | What it does                                  |
-| ---------------------- | --------------------------------------------- |
-| `npm run dev`          | Start the dev server                          |
-| `npm run build`        | Production build                              |
-| `npm run start`        | Start a production build                      |
-| `npm run lint`         | ESLint                                        |
-| `npm run typecheck`    | `tsc --noEmit`                                |
-| `npm run test`         | Run the Vitest suite once                     |
-| `npm run test:watch`   | Vitest in watch mode                          |
-| `npm run test:e2e`     | Run Playwright end-to-end tests               |
-| `npm run db:seed`      | Seed a local Supabase instance with test data |
-| `npm run format`       | Prettier — write                              |
-| `npm run format:check` | Prettier — check only                         |
+| Command                | What it does                                      |
+| ---------------------- | ------------------------------------------------- |
+| `npm run dev`          | Start the dev server                              |
+| `npm run build`        | Production build                                  |
+| `npm run start`        | Start a production build                          |
+| `npm run lint`         | ESLint                                            |
+| `npm run typecheck`    | `tsc --noEmit`                                    |
+| `npm run test`         | Run the Vitest suite once                         |
+| `npm run test:watch`   | Vitest in watch mode                              |
+| `npm run test:e2e`     | Run Playwright end-to-end tests                   |
+| `npm run db:seed`      | Seed a local Supabase instance with test data     |
+| `npm run demo:reset`   | Restore the demo's data, preserving auth accounts |
+| `npm run format`       | Prettier — write                                  |
+| `npm run format:check` | Prettier — check only                             |
 
 ## Testing
 

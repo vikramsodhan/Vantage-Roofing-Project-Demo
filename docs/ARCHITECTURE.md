@@ -317,6 +317,9 @@ From [CLAUDE.md](../CLAUDE.md), with details:
   `format:check`, `test`, `build` in one job; a second job boots local Supabase and runs
   `test:e2e`.
 - Deploys are handled by Vercel's GitHub integration, which builds and promotes `main`.
+- `.github/workflows/demo-reseed.yml` — nightly (plus manual dispatch) `npm run demo:reset`,
+  restoring the public demo's jobs, reference data, and profile roles after visitors change
+  them. Preserves `auth.users`, so live sessions survive a reset.
 - Production database backups run nightly in a separate private repo, not this one.
 
 ## Env vars

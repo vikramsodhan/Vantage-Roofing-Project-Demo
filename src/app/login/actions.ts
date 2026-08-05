@@ -11,6 +11,7 @@
 
 import type { ServerActionResult } from "@/lib/actions"
 import { DEMO_ROLES, type DemoRole, IS_DEMO_MODE } from "@/lib/demo"
+import { DEMO_PASSWORD } from "@/lib/demoPassword"
 import { createClient } from "@/lib/supabase/server"
 
 /**
@@ -35,15 +36,10 @@ export async function enterDemo(role: DemoRole): Promise<ServerActionResult> {
     return { success: false, error: "Unknown demo role." }
   }
 
-  const password = process.env.DEMO_PASSWORD
-  if (!password) {
-    return { success: false, error: "Demo mode is misconfigured — DEMO_PASSWORD is unset." }
-  }
-
   const supabase = await createClient()
   const { error } = await supabase.auth.signInWithPassword({
     email: DEMO_ACCOUNTS[role],
-    password,
+    password: DEMO_PASSWORD,
   })
 
   if (error) {

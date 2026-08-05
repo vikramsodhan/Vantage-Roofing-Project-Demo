@@ -20,9 +20,8 @@ import { faker } from "@faker-js/faker"
 import { createClient } from "@supabase/supabase-js"
 
 import type { Database } from "../src/types/database.types"
-
-type JobInsert = Database["public"]["Tables"]["jobs"]["Insert"]
-type Role = "salesperson" | "manager" | "owner"
+import { buildJobs, type JobInsert, type JobUsers } from "./buildJobs"
+import { DEMO_ACCOUNTS, DEMO_PASSWORD, type SeededRole as Role } from "./demoData"
 
 const SUPABASE_URL = process.env.SEED_SUPABASE_URL
 const SECRET_KEY = process.env.SEED_SUPABASE_SECRET_KEY
@@ -51,21 +50,12 @@ const supabase = createClient<Database>(SUPABASE_URL, SECRET_KEY, {
   auth: { autoRefreshToken: false, persistSession: false },
 })
 
-// Fixed seed → the same data every run, so E2E assertions don't drift.
+// Fixed seed → the same names every run. buildJobs re-seeds independently, so
+// the jobs are identical whether they came from here or from resetDemo.ts.
 faker.seed(20260731)
 
-const JOB_COUNT = 400
-
-// Quotes span this year and the two before it, anchored to the real clock
-// rather than fixed dates: the year-end plan reads *this* year's jobs, so a
-// hardcoded end date would leave that page empty the moment the year rolled
-// over. Faker still runs off a fixed seed, so the figures stay deterministic —
-// only the window they land in moves.
-const TODAY = new Date()
-const OLDEST_QUOTE = new Date(Date.UTC(TODAY.getUTCFullYear() - 2, 0, 1))
-
 // The account the E2E login test signs in as (via the dev email/password form).
-const PRIMARY_OWNER = { email: "owner@vantage.test", password: "password123" }
+const PRIMARY_OWNER_EMAIL = DEMO_ACCOUNTS.find((a) => a.role === "owner")!.email
 
 async function wipe() {
   // Jobs reference profiles (no cascade), so clear jobs first. Deleting an auth
@@ -106,31 +96,18 @@ async function createUser(
   return data.user.id
 }
 
-async function createUsers() {
-  const owner = await createUser(
-    PRIMARY_OWNER.email,
-    PRIMARY_OWNER.password,
-    "Alex Rivera",
-    "owner",
-  )
-  const manager = await createUser(
-    "manager@vantage.test",
-    "password123",
-    faker.person.fullName(),
-    "manager",
-  )
-  const salespeople: string[] = []
-  for (let i = 1; i <= 5; i++) {
-    salespeople.push(
-      await createUser(
-        `sales${i}@vantage.test`,
-        "password123",
-        faker.person.fullName(),
-        "salesperson",
-      ),
-    )
+async function createUsers(): Promise<JobUsers> {
+  // Driven off DEMO_ACCOUNTS so this and resetDemo.ts can't disagree about who
+  // exists — the reset restores roles by email against that same list.
+  const byRole: Record<Role, string[]> = { owner: [], manager: [], salesperson: [] }
+
+  for (const { email, role } of DEMO_ACCOUNTS) {
+    // The owner's name is fixed; it appears in the README and screenshots.
+    const fullName = role === "owner" ? "Alex Rivera" : faker.person.fullName()
+    byRole[role].push(await createUser(email, DEMO_PASSWORD, fullName, role))
   }
-  return { owner, manager, salespeople }
+
+  return { owner: byRole.owner[0], manager: byRole.manager[0], salespeople: byRole.salesperson }
 }
 
 async function fetchReferenceData() {
@@ -140,83 +117,6 @@ async function fetchReferenceData() {
     throw new Error("No divisions / work_types found — did seed.sql run? (npx supabase db reset)")
   }
   return { divisionIds: divisions.map((d) => d.id), workTypes }
-}
-
-const ymd = (date: Date) => date.toISOString().slice(0, 10)
-const money = (min: number, max: number) => faker.number.int({ min, max })
-
-function buildJobs(
-  ref: Awaited<ReturnType<typeof fetchReferenceData>>,
-  users: Awaited<ReturnType<typeof createUsers>>,
-): JobInsert[] {
-  const enteredByPool = [...users.salespeople, users.owner, users.manager]
-
-  return Array.from({ length: JOB_COUNT }, () => {
-    const workType = faker.helpers.arrayElement(ref.workTypes)
-    const roof_type = workType.is_roof_type_required
-      ? faker.helpers.arrayElement(["reroof", "newroof"] as const)
-      : null
-
-    const dateQuoted = faker.date.between({ from: OLDEST_QUOTE, to: TODAY })
-    const sold = faker.datatype.boolean(0.45)
-    // A sale can't land in the future, so a close date past today collapses to
-    // today — otherwise a recently quoted job could report revenue next year.
-    const soldAt = faker.date.soon({
-      days: faker.number.int({ min: 5, max: 200 }),
-      refDate: dateQuoted,
-    })
-    const dateSold = sold ? (soldAt > TODAY ? TODAY : soldAt) : null
-
-    const materials = money(2000, 15000)
-    const labour = money(1500, 12000)
-    const disposal = money(200, 2000)
-    const warranty = money(0, 1500)
-    const other = money(0, 1000)
-    const gutters = money(0, 2000)
-    const total_job_cost = materials + labour + disposal + warranty + other + gutters
-    const markup_pct = faker.number.int({ min: 30, max: 55 })
-    const sales_price = Math.round(total_job_cost * (1 + markup_pct / 100))
-
-    // Actual costs only exist once a job is sold (mirrors zeroActualsWhenUnsold).
-    const actual = (v: number) =>
-      sold ? Math.round(v * faker.number.float({ min: 0.85, max: 1.15 })) : 0
-
-    // A few genuine cross-year sold jobs are flagged as carry-overs, to exercise
-    // the dashboard's carry-over handling on real data.
-    const crossYear = dateSold != null && dateSold.getFullYear() > dateQuoted.getFullYear()
-    const exclude_from_quote_metrics = crossYear && faker.datatype.boolean(0.5)
-
-    return {
-      job_address: `${faker.location.streetAddress()}, ${faker.location.city()}`,
-      division_id: faker.helpers.arrayElement(ref.divisionIds),
-      work_type_id: workType.id,
-      roof_type,
-      salesperson_id: faker.helpers.arrayElement(users.salespeople),
-      entered_by: faker.helpers.arrayElement(enteredByPool),
-      date_quoted: ymd(dateQuoted),
-      date_sold: dateSold ? ymd(dateSold) : null,
-      sold,
-      exclude_from_quote_metrics,
-      squares: faker.number.int({ min: 8, max: 60 }),
-      days: faker.number.float({ min: 0.5, max: 12, fractionDigits: 1 }),
-      materials,
-      labour,
-      disposal,
-      warranty,
-      other,
-      gutters,
-      actual_materials: actual(materials),
-      actual_labour: actual(labour),
-      actual_disposal: actual(disposal),
-      actual_warranty: actual(warranty),
-      actual_other: actual(other),
-      actual_gutters: actual(gutters),
-      total_job_cost,
-      sales_price,
-      mgn: sales_price - total_job_cost,
-      markup_pct,
-    }
-  })
 }
 
 async function insertJobs(jobs: JobInsert[]) {
@@ -235,8 +135,8 @@ async function main() {
   await insertJobs(buildJobs(ref, users))
 
   const { count } = await supabase.from("jobs").select("*", { count: "exact", head: true })
-  console.log(`Done — ${users.salespeople.length + 2} users, ${count} jobs.`)
-  console.log(`Owner login (dev form): ${PRIMARY_OWNER.email} / ${PRIMARY_OWNER.password}`)
+  console.log(`Done — ${DEMO_ACCOUNTS.length} users, ${count} jobs.`)
+  console.log(`Owner login (dev form): ${PRIMARY_OWNER_EMAIL} / ${DEMO_PASSWORD}`)
 }
 
 main().catch((error) => {

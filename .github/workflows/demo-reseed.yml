@@ -1,0 +1,46 @@
+name: Demo reseed
+
+# Restores the public demo's data. Visitors sign in as real roles, so they can
+# edit jobs, deactivate work types, and change other people's roles from /admin.
+#
+# Safe to expose on a public repo: `workflow_dispatch` requires write access to
+# this repository, so only collaborators see the "Run workflow" button, and
+# GitHub never passes secrets to workflow runs in forks.
+on:
+  schedule:
+    # 08:37 UTC — roughly half past midnight on the Pacific coast, when nobody's
+    # looking. The odd minute is deliberate: GitHub queues scheduled workflows
+    # globally and the top of the hour is where everyone points theirs, so "0 8"
+    # can sit in that backlog for a long stretch. Nothing here is time-critical,
+    # but an off-peak minute means it runs roughly when it says it does.
+    #
+    # Note: GitHub disables scheduled workflows on public repos after 60 days of
+    # repository inactivity, and only runs them on the default branch.
+    - cron: "37 8 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A reset deletes every job before reinserting them. Two overlapping runs would
+# interleave those phases, so let one finish rather than cancelling it midway
+# and leaving the demo empty.
+concurrency:
+  group: demo-reseed
+  cancel-in-progress: false
+
+jobs:
+  reseed:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run demo:reset
+        env:
+          DEMO_SUPABASE_URL: ${{ secrets.DEMO_SUPABASE_URL }}
+          # Service-role key: bypasses RLS and reaches the auth admin API.
+          DEMO_SUPABASE_SECRET_KEY: ${{ secrets.DEMO_SUPABASE_SECRET_KEY }}
