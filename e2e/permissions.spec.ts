@@ -217,6 +217,43 @@ test.describe("database rules", () => {
     expect(allowed).toBeNull()
   })
 
+  test("a salesperson can't create a job attributed to a colleague", async () => {
+    const client = await loginSupabaseAs(SALESPERSON)
+    const userId = await currentUserId(client)
+
+    const { data: colleagueJob, error: lookupError } = await client
+      .from("jobs")
+      .select("salesperson_id, division_id, work_type_id")
+      .neq("salesperson_id", userId)
+      .limit(1)
+      .single()
+    if (lookupError) throw new Error(`no colleague-owned job: ${lookupError.message}`)
+
+    const newJob = {
+      job_address: "1 Attribution Test Rd",
+      date_quoted: "2026-01-15",
+      division_id: colleagueJob.division_id,
+      work_type_id: colleagueJob.work_type_id,
+      entered_by: userId,
+    }
+
+    const { error: denied } = await client
+      .from("jobs")
+      .insert({ ...newJob, salesperson_id: colleagueJob.salesperson_id })
+    expect(denied).not.toBeNull()
+
+    const { data: created, error: allowed } = await client
+      .from("jobs")
+      .insert({ ...newJob, salesperson_id: userId })
+      .select("id, salesperson_id")
+      .single()
+    expect(allowed).toBeNull()
+    expect(created!.salesperson_id).toBe(userId)
+
+    // Drop it again — a stray job would drift the figures a later spec reads.
+    await client.from("jobs").delete().eq("id", created!.id)
+  })
+
   test("a salesperson can only change their own jobs", async () => {
     const client = await loginSupabaseAs(SALESPERSON)
     const ownJobId = await getAJobIdFromSalesPerson(SALESPERSON, true)

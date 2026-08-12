@@ -7,7 +7,7 @@
 import { revalidatePath } from "next/cache"
 
 import { requireActiveAccount, type ServerActionResult } from "@/lib/actions"
-import { canUserModifyJob } from "@/lib/authorization/jobPermissions"
+import { canChangeSalesperson, canUserModifyJob } from "@/lib/authorization/jobPermissions"
 import { getProfile } from "@/lib/supabase/getProfile"
 import { createClient } from "@/lib/supabase/server"
 import { insertWorkType } from "@/lib/workTypes"
@@ -77,9 +77,10 @@ async function insertPendingWorkType(
 }
 
 /**
- * Creates a new job. Stamps entered_by with the server-side user id — a
- * client-supplied value is dropped, so authorship can't be spoofed. RLS also
- * requires an active user to insert, mirroring requireActiveAccount below.
+ * Creates a new job. Stamps entered_by with the server-side user id and pins
+ * salesperson_id for anyone who may not choose it, so neither authorship nor
+ * attribution can be spoofed. RLS also requires an active user to insert,
+ * mirroring requireActiveAccount below.
  */
 export async function createJob(
   payloadData: JobInsert & { pending_work_type: PendingWorkType | null },
@@ -98,6 +99,11 @@ export async function createJob(
     workTypeId = result.id
   }
 
+  // Only managers and owners may attribute a job to someone else.
+  const salespersonId = canChangeSalesperson(auth.profile)
+    ? jobData.salesperson_id
+    : auth.profile.id
+
   const { data, error } = await supabase
     .from("jobs")
     .insert({
@@ -106,6 +112,7 @@ export async function createJob(
       job_address: jobData.job_address.trim(),
       notes: trimToNull(jobData.notes),
       work_type_id: workTypeId,
+      salesperson_id: salespersonId,
       entered_by: auth.profile.id,
     })
     .select("id")
