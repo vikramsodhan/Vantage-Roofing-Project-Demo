@@ -11,9 +11,10 @@ import { canChangeSalesperson, canUserModifyJob } from "@/lib/authorization/jobP
 import { getProfile } from "@/lib/supabase/getProfile"
 import { createClient } from "@/lib/supabase/server"
 import { insertWorkType } from "@/lib/workTypes"
-import type { JobInsert, JobUpdate, Profile, WorkType } from "@/types"
+import type { Profile, WorkType } from "@/types"
 
 import { zeroActualsWhenUnsold } from "./_lib/actualCosts"
+import { type JobPayload, makeJobPayloadSchema } from "./_lib/jobFormSchema"
 
 type PendingWorkType = Pick<WorkType, "name" | "is_roof_type_required">
 type SupabaseClient = Awaited<ReturnType<typeof createClient>>
@@ -29,6 +30,28 @@ async function getAuthContext() {
   const supabase = await createClient()
   const profile = await getProfile()
   return { supabase, profile }
+}
+
+// A server action is a network endpoint, and its declared payload type is erased
+// at runtime — so the form's own schema is re-run here before anything reaches
+// the database. Same approach as saveYearEndPlan in year-end-plan/actions.ts.
+async function parseJobPayload(
+  supabase: SupabaseClient,
+  input: unknown,
+): Promise<{ ok: true; data: JobPayload } | { ok: false; result: ServerActionResult }> {
+  // The roof-type and squares rules depend on the chosen work type, so the
+  // schema is built against the current list rather than a hardcoded one.
+  const { data: workTypes } = await supabase.from("work_types").select("id, is_roof_type_required")
+
+  const parsed = makeJobPayloadSchema(workTypes ?? []).safeParse(input)
+  if (!parsed.success) {
+    return {
+      ok: false,
+      result: { success: false, error: parsed.error.issues[0]?.message ?? "Invalid job details." },
+    }
+  }
+
+  return { ok: true, data: parsed.data }
 }
 
 // Loads the job's current salesperson_id from the DB and verifies the caller is
@@ -82,15 +105,16 @@ async function insertPendingWorkType(
  * attribution can be spoofed. RLS also requires an active user to insert,
  * mirroring requireActiveAccount below.
  */
-export async function createJob(
-  payloadData: JobInsert & { pending_work_type: PendingWorkType | null },
-): Promise<ServerActionResult> {
+export async function createJob(input: unknown): Promise<ServerActionResult> {
   const { supabase, profile } = await getAuthContext()
 
   const auth = requireActiveAccount(profile)
   if (!auth.ok) return auth.result
 
-  const { pending_work_type, ...jobData } = payloadData
+  const parsed = await parseJobPayload(supabase, input)
+  if (!parsed.ok) return parsed.result
+
+  const { pending_work_type, ...jobData } = parsed.data
   let workTypeId = jobData.work_type_id
 
   if (pending_work_type) {
@@ -129,13 +153,11 @@ export async function createJob(
 
 /**
  * Updates a job. Re-checks modify permission server-side — the edit UI is
- * gated, but this action can be invoked directly. entered_by is dropped from
- * the payload; only createJob may set a job's original creator.
+ * gated, but this action can be invoked directly. entered_by isn't part of the
+ * schema, so a client-supplied one is stripped: only createJob sets a job's
+ * original creator.
  */
-export async function updateJob(
-  payloadData: JobUpdate & { pending_work_type: PendingWorkType | null },
-  id: string,
-): Promise<ServerActionResult> {
+export async function updateJob(input: unknown, id: string): Promise<ServerActionResult> {
   const { supabase, profile } = await getAuthContext()
 
   const auth = requireActiveAccount(profile)
@@ -144,7 +166,10 @@ export async function updateJob(
   const permission = await requireJobModifyPermission(supabase, auth.profile, id)
   if (!permission.success) return permission
 
-  const { pending_work_type, ...jobData } = payloadData
+  const parsed = await parseJobPayload(supabase, input)
+  if (!parsed.ok) return parsed.result
+
+  const { pending_work_type, ...jobData } = parsed.data
   let workTypeId = jobData.work_type_id
 
   if (pending_work_type) {
@@ -153,16 +178,12 @@ export async function updateJob(
     workTypeId = result.id
   }
 
-  // entered_by records the job's ORIGINAL creator — only createJob may set it.
-  // A client-supplied value can't be trusted, so drop it before the update.
-  delete jobData.entered_by
-
   const { error } = await supabase
     .from("jobs")
     .update({
       ...jobData,
       ...zeroActualsWhenUnsold(jobData.sold),
-      job_address: jobData.job_address?.trim(),
+      job_address: jobData.job_address.trim(),
       notes: trimToNull(jobData.notes),
       work_type_id: workTypeId,
     })
