@@ -100,10 +100,20 @@ export function formatDate(value: string | null | undefined): string {
   return format(parseISO(value), "MMMM d, yyyy")
 }
 
-// Full timestamps from the DB (e.g. date_entered, updated_at)
+// Vercel runs UTC — hardcode the business's timezone so times don't render in the future.
+const dateTimeInBusinessTz = new Intl.DateTimeFormat("en-US", {
+  timeZone: "America/Vancouver",
+  month: "short",
+  day: "numeric",
+  year: "numeric",
+  hour: "numeric",
+  minute: "2-digit",
+  hour12: true,
+})
+
 export function formatDateTime(value: string | null | undefined): string {
   if (!value) return EMPTY
-  return format(parseISO(value), "MMM d, yyyy, h:mm a")
+  return dateTimeInBusinessTz.format(parseISO(value))
 }
 
 export function formatNumber(value: number | string | null | undefined): string {
