@@ -21,7 +21,7 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
   const { id: job_id } = await params
 
   const supabase = await createClient()
-  const { data: rawJob } = await supabase
+  const { data: rawJob, error } = await supabase
     .from("jobs_with_calculations")
     .select(
       `
@@ -40,6 +40,12 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
     .eq("id", job_id)
     .single()
 
+  // PGRST116 = no row for this id (queried by primary key, so this is the only
+  // way to get it) — a genuine 404. Any other error is a real failure, not "not found".
+  if (error) {
+    if (error.code === "PGRST116") notFound()
+    throw new Error(error.message)
+  }
   if (!rawJob) notFound()
 
   // Cast at the query boundary — safe because the selected fields are all NOT NULL

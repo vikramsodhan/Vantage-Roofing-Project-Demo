@@ -146,6 +146,20 @@ test.describe("job access", () => {
     await page.goto("/jobs/new")
     await expect(salespersonField(page).getByRole("combobox")).toBeVisible()
   })
+
+  // A malformed id forces a real query error (not "0 rows") — must render as
+  // an error, not a false 404. /edit shares jobs/[id]/error.tsx too.
+  test("a malformed job id renders an error, not a 404", async ({ page }) => {
+    await loginAs(page, SALESPERSON)
+
+    await page.goto("/jobs/not-a-valid-id")
+    await expect(page.getByText("Couldn't load this job.")).toBeVisible()
+    await expect(page.getByText("Page not found")).not.toBeVisible()
+
+    await page.goto("/jobs/not-a-valid-id/edit")
+    await expect(page.getByText("Couldn't load this job.")).toBeVisible()
+    await expect(page.getByText("Page not found")).not.toBeVisible()
+  })
 })
 
 /**
