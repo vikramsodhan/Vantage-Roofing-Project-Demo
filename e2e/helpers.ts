@@ -42,6 +42,25 @@ export async function loginSupabaseAs(user: SeededUser) {
   return client
 }
 
+/**
+ * An authenticated account with no profile row yet — the only state a profile
+ * INSERT is possible from, and one no seeded user is in.
+ *
+ * Signed up here rather than added to the seed, which would park a permanently
+ * broken account in the fixture set every spec shares. Local Supabase has
+ * `enable_confirmations = false`, so the session is live immediately. The email
+ * is randomised because a repeat signup returns a session-less placeholder user
+ * instead of an error.
+ */
+export async function signUpFreshUser() {
+  const client = createClient<Database>(LOCAL_SUPABASE_URL, LOCAL_PUBLISHABLE_KEY)
+  const email = `newcomer-${crypto.randomUUID()}@vantage.test`
+  const { data, error } = await client.auth.signUp({ email, password: PASSWORD })
+  if (error) throw new Error(`sign up ${email}: ${error.message}`)
+  if (!data.session || !data.user) throw new Error(`sign up ${email}: no session returned`)
+  return { client, userId: data.user.id, email }
+}
+
 // Log in and wait until the dashboard has loaded. Every role lands there, so
 // this doubles as each spec's "the session is live" checkpoint.
 export async function loginAs(page: Page, user: SeededUser) {

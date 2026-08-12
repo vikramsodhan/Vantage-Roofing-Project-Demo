@@ -8,6 +8,7 @@ import {
   SALESPERSON,
   type SeededUser,
   sidebarLink,
+  signUpFreshUser,
 } from "./helpers"
 
 /**
@@ -180,6 +181,27 @@ test.describe("database rules", () => {
       .from("year_end_plans")
       .upsert({ year: SCRATCH_YEAR, target_revenue: 2_000_000 })
     expect(blocked).not.toBeNull()
+  })
+
+  test("a new user can't sign themselves up as an owner", async () => {
+    const { client, userId, email } = await signUpFreshUser()
+    const profile = { id: userId, email, full_name: "Newcomer", is_active: true }
+
+    // The escalation attempt runs FIRST, while there genuinely is no profile row.
+    // Run after the positive control below, this insert would be rejected by the
+    // primary key instead of by the policy, and would pass with RLS wide open.
+    const { error: escalation } = await client
+      .from("profiles")
+      .insert({ ...profile, role: "owner" })
+    expect(escalation).not.toBeNull()
+
+    // Positive control: the exact payload auth/callback/route.ts sends still
+    // lands, so the rejection above is the role constraint doing its job and not
+    // a blanket denial that would break every first-time sign-in.
+    const { error: allowed } = await client
+      .from("profiles")
+      .insert({ ...profile, role: "salesperson" })
+    expect(allowed).toBeNull()
   })
 
   test("a salesperson can only change their own jobs", async () => {
