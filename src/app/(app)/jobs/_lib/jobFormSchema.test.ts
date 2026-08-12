@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { makeSchema } from "./jobFormSchema"
+import { makeJobPayloadSchema, makeSchema } from "./jobFormSchema"
 
 // Work-type lists to inject into makeSchema, which decides roof-type rules from them.
 const nonRoofing = [{ id: "wt-nonroof", is_roof_type_required: false }]
@@ -44,7 +44,10 @@ function validInput(overrides: Record<string, unknown> = {}) {
 }
 
 // Validate an input and return just the error messages ([] when it passes).
-function errorMessages(schema: ReturnType<typeof makeSchema>, input: unknown): string[] {
+function errorMessages(
+  schema: ReturnType<typeof makeSchema> | ReturnType<typeof makeJobPayloadSchema>,
+  input: unknown,
+): string[] {
   const result = schema.safeParse(input)
   return result.success ? [] : result.error.issues.map((issue) => issue.message)
 }
@@ -143,5 +146,53 @@ describe("makeSchema", () => {
       "Markup can't be below -100%",
     )
     expect(errorMessages(schema, validInput({ markup_pct: -100 }))).toEqual([])
+  })
+})
+
+// The schema the job server actions run against untrusted input. The rules
+// themselves are shared with makeSchema and covered above; these cover what only
+// exists on the server side.
+describe("makeJobPayloadSchema", () => {
+  it("accepts what the form sends", () => {
+    expect(errorMessages(makeJobPayloadSchema(nonRoofing), validInput())).toEqual([])
+  })
+
+  it.each([
+    ["a negative cost", { materials: -5 }],
+    ["a missing required field", { division_id: "" }],
+    ["an unknown roof type", { roof_type: "gold-plated" }],
+  ])("rejects %s", (_case, override) => {
+    expect(makeJobPayloadSchema(nonRoofing).safeParse(validInput(override)).success).toBe(false)
+  })
+
+  it("strips a client-supplied entered_by", () => {
+    const parsed = makeJobPayloadSchema(nonRoofing).safeParse(
+      validInput({ entered_by: "someone-elses-id" }),
+    )
+    expect(parsed.success).toBe(true)
+    expect(parsed.data).not.toHaveProperty("entered_by")
+  })
+
+  it("takes the roof-type rule from an inline pending work type", () => {
+    const messages = errorMessages(
+      makeJobPayloadSchema([]),
+      validInput({
+        work_type_id: "__new__",
+        roof_type: null,
+        pending_work_type: { name: "Skylights", is_roof_type_required: true },
+      }),
+    )
+    expect(messages).toContain("Roof type is required for this work type")
+  })
+
+  it("rejects a pending work type with no name", () => {
+    const messages = errorMessages(
+      makeJobPayloadSchema([]),
+      validInput({
+        work_type_id: "__new__",
+        pending_work_type: { name: "", is_roof_type_required: false },
+      }),
+    )
+    expect(messages).toContain("Work type name is required")
   })
 })

@@ -19,7 +19,7 @@ export default async function EditJobPage({ params }: { params: Promise<{ id: st
   // options that the job already references, so editing other fields doesn't
   // force the user to change them.
   // Only the columns JobForm prefills (JobFormDefaults) — keep the two in sync.
-  const { data: jobData } = await supabase
+  const { data: jobData, error } = await supabase
     .from("jobs")
     .select(
       "id, job_address, notes, division_id, work_type_id, roof_type, salesperson_id, sold, exclude_from_quote_metrics, date_quoted, date_sold, squares, days, materials, labour, disposal, warranty, other, gutters, actual_materials, actual_labour, actual_disposal, actual_warranty, actual_other, actual_gutters, total_job_cost, sales_price, mgn, markup_pct",
@@ -27,6 +27,12 @@ export default async function EditJobPage({ params }: { params: Promise<{ id: st
     .eq("id", job_id)
     .single()
 
+  // PGRST116 = no row for this id (queried by primary key, so this is the only
+  // way to get it) — a genuine 404. Any other error is a real failure, not "not found".
+  if (error) {
+    if (error.code === "PGRST116") notFound()
+    throw new Error(error.message)
+  }
   if (!jobData) notFound()
 
   if (!canUserModifyJob(profile, jobData.salesperson_id)) {

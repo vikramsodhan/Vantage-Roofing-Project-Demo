@@ -1,5 +1,5 @@
 import { expect, type Page } from "@playwright/test"
-import { createClient } from "@supabase/supabase-js"
+import { createClient, type SupabaseClient } from "@supabase/supabase-js"
 
 import type { Database } from "@/types/database.types"
 
@@ -40,6 +40,33 @@ export async function loginSupabaseAs(user: SeededUser) {
   const { error } = await client.auth.signInWithPassword(user)
   if (error) throw new Error(`sign in as ${user.email}: ${error.message}`)
   return client
+}
+
+// The signed-in user's id — unwrapped here so a dead session fails by name,
+// not as a null dereference in whichever query used the id.
+export async function currentUserId(client: SupabaseClient<Database>) {
+  const { data, error } = await client.auth.getUser()
+  if (error) throw new Error(`no session: ${error.message}`)
+  return data.user.id
+}
+
+/**
+ * An authenticated account with no profile row yet — the only state a profile
+ * INSERT is possible from, and one no seeded user is in.
+ *
+ * Signed up here rather than added to the seed, which would park a permanently
+ * broken account in the fixture set every spec shares. Local Supabase has
+ * `enable_confirmations = false`, so the session is live immediately. The email
+ * is randomised because a repeat signup returns a session-less placeholder user
+ * instead of an error.
+ */
+export async function signUpFreshUser() {
+  const client = createClient<Database>(LOCAL_SUPABASE_URL, LOCAL_PUBLISHABLE_KEY)
+  const email = `newcomer-${crypto.randomUUID()}@vantage.test`
+  const { data, error } = await client.auth.signUp({ email, password: PASSWORD })
+  if (error) throw new Error(`sign up ${email}: ${error.message}`)
+  if (!data.session || !data.user) throw new Error(`sign up ${email}: no session returned`)
+  return { client, userId: data.user.id, email }
 }
 
 // Log in and wait until the dashboard has loaded. Every role lands there, so

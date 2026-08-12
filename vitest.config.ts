@@ -16,9 +16,13 @@ export default defineConfig({
     // scripts/ is included for the demo dataset's drift test, which guards
     // scripts/demoData.ts against supabase/seed.sql.
     include: ["src/**/*.test.ts", "scripts/**/*.test.ts"],
-    // Set dummy env vars for tests so imports of lib/env.ts don't throw.
-    // Tests don't call Supabase; these values just allow the module imports to succeed.
     env: {
+      // Run tests in UTC everywhere, matching CI and Vercel. Without this a
+      // developer machine set to America/Vancouver can pass a timezone-
+      // sensitive test that fails on the runner.
+      TZ: "UTC",
+      // Dummy values so imports of lib/env.ts don't throw. Tests don't call
+      // Supabase; these just let the module imports succeed.
       NEXT_PUBLIC_SUPABASE_URL: "http://localhost:54321",
       NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "sb_test_key",
     },

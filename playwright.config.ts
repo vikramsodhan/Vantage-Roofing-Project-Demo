@@ -24,6 +24,10 @@ export default defineConfig({
   // that legitimately outruns 30s on a loaded machine. A genuinely broken test
   // still fails — just later.
   timeout: 60_000,
+  // Assertions get the same headroom for the same reason. The default is 5s,
+  // which is the budget a first-render dashboard blows through while `next dev`
+  // compiles it — the test had 60s, but the expect inside it only ever had 5.
+  expect: { timeout: 15_000 },
   reporter: [["list"], ["html", { open: "never" }]],
   // Reseed local Supabase once before the whole suite — fresh, deterministic
   // data every run.

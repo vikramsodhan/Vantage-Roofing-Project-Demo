@@ -1,6 +1,7 @@
 import { expect, type Page, test } from "@playwright/test"
 
 import {
+  currentUserId,
   loginAs,
   loginSupabaseAs,
   MANAGER,
@@ -8,6 +9,7 @@ import {
   SALESPERSON,
   type SeededUser,
   sidebarLink,
+  signUpFreshUser,
 } from "./helpers"
 
 /**
@@ -80,13 +82,11 @@ test.describe("page access", () => {
  */
 async function getAJobIdFromSalesPerson(user: SeededUser, ownedByThem: boolean) {
   const client = await loginSupabaseAs(user)
-  const {
-    data: { user: account },
-  } = await client.auth.getUser()
+  const accountId = await currentUserId(client)
 
   const query = client.from("jobs").select("id").order("id").limit(1)
   const { data, error } = await (
-    ownedByThem ? query.eq("salesperson_id", account!.id) : query.neq("salesperson_id", account!.id)
+    ownedByThem ? query.eq("salesperson_id", accountId) : query.neq("salesperson_id", accountId)
   ).single()
   if (error) throw new Error(`no ${ownedByThem ? "owned" : "unowned"} job: ${error.message}`)
   return data.id
@@ -145,6 +145,20 @@ test.describe("job access", () => {
     await page.goto("/jobs/new")
     await expect(salespersonField(page).getByRole("combobox")).toBeVisible()
   })
+
+  // A malformed id forces a real query error (not "0 rows") — must render as
+  // an error, not a false 404. /edit shares jobs/[id]/error.tsx too.
+  test("a malformed job id renders an error, not a 404", async ({ page }) => {
+    await loginAs(page, SALESPERSON)
+
+    await page.goto("/jobs/not-a-valid-id")
+    await expect(page.getByText("Couldn't load this job.")).toBeVisible()
+    await expect(page.getByText("Page not found")).not.toBeVisible()
+
+    await page.goto("/jobs/not-a-valid-id/edit")
+    await expect(page.getByText("Couldn't load this job.")).toBeVisible()
+    await expect(page.getByText("Page not found")).not.toBeVisible()
+  })
 })
 
 /**
@@ -180,6 +194,64 @@ test.describe("database rules", () => {
       .from("year_end_plans")
       .upsert({ year: SCRATCH_YEAR, target_revenue: 2_000_000 })
     expect(blocked).not.toBeNull()
+  })
+
+  test("a new user can't sign themselves up as an owner", async () => {
+    const { client, userId, email } = await signUpFreshUser()
+    const profile = { id: userId, email, full_name: "Newcomer", is_active: true }
+
+    // The escalation attempt runs FIRST, while there genuinely is no profile row.
+    // Run after the positive control below, this insert would be rejected by the
+    // primary key instead of by the policy, and would pass with RLS wide open.
+    const { error: escalation } = await client
+      .from("profiles")
+      .insert({ ...profile, role: "owner" })
+    expect(escalation).not.toBeNull()
+
+    // Positive control: the exact payload auth/callback/route.ts sends still
+    // lands, so the rejection above is the role constraint doing its job and not
+    // a blanket denial that would break every first-time sign-in.
+    const { error: allowed } = await client
+      .from("profiles")
+      .insert({ ...profile, role: "salesperson" })
+    expect(allowed).toBeNull()
+  })
+
+  test("a salesperson can't create a job attributed to a colleague", async () => {
+    const client = await loginSupabaseAs(SALESPERSON)
+    const userId = await currentUserId(client)
+
+    const { data: colleagueJob, error: lookupError } = await client
+      .from("jobs")
+      .select("salesperson_id, division_id, work_type_id")
+      .neq("salesperson_id", userId)
+      .limit(1)
+      .single()
+    if (lookupError) throw new Error(`no colleague-owned job: ${lookupError.message}`)
+
+    const newJob = {
+      job_address: "1 Attribution Test Rd",
+      date_quoted: "2026-01-15",
+      division_id: colleagueJob.division_id,
+      work_type_id: colleagueJob.work_type_id,
+      entered_by: userId,
+    }
+
+    const { error: denied } = await client
+      .from("jobs")
+      .insert({ ...newJob, salesperson_id: colleagueJob.salesperson_id })
+    expect(denied).not.toBeNull()
+
+    const { data: created, error: allowed } = await client
+      .from("jobs")
+      .insert({ ...newJob, salesperson_id: userId })
+      .select("id, salesperson_id")
+      .single()
+    expect(allowed).toBeNull()
+    expect(created!.salesperson_id).toBe(userId)
+
+    // Drop it again — a stray job would drift the figures a later spec reads.
+    await client.from("jobs").delete().eq("id", created!.id)
   })
 
   test("a salesperson can only change their own jobs", async () => {
