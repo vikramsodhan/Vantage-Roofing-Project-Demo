@@ -74,6 +74,11 @@ test("clearing every override restores the live figures but keeps the target", a
 
   await page.getByRole("button", { name: "Save" }).click()
   await expect(page.getByText("Plan saved")).toBeVisible()
+  // Every save renders the same "Plan saved" text and sonner leaves it up for
+  // about four seconds. Without waiting for this one to clear, the identical
+  // assertion after the second save matches *this* toast and passes before that
+  // save has landed — letting the reload below race an unfinished write.
+  await expect(page.getByText("Plan saved")).toBeHidden()
 
   await page.getByRole("button", { name: "Clear Overrides" }).click()
   await page.getByRole("button", { name: "Save" }).click()
