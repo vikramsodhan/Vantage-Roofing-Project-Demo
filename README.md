@@ -69,7 +69,7 @@ last two are the ones that matter:
 4. **Row Level Security** — Postgres policies, so even a hand-rolled API call with a valid session
    only sees rows that user is entitled to
 
-Two of the Playwright tests deliberately skip the browser entirely and hit Supabase directly with a
+Four of the Playwright tests deliberately skip the browser entirely and hit Supabase directly with a
 signed-in client, because driving the UI can only ever prove a button is hidden — never what happens
 when someone bypasses it.
 
@@ -106,10 +106,10 @@ accounts outside the seeded set, so a stale credential fails safe rather than wi
 
 ### Testing
 
-**138 unit tests** covering the metrics registry, permission predicates, form schemas, formatters,
+**144 unit tests** covering the metrics registry, permission predicates, form schemas, formatters,
 and the year-end maths — pure functions, no database or browser.
 
-**15 Playwright flows** against a real Supabase instance: login, job creation, the full role-access
+**18 Playwright flows** against a real Supabase instance: login, job creation, the full role-access
 matrix, and the year-end planner's override behaviour.
 
 CI runs lint, typecheck, format, unit tests, and a production build, then boots Supabase in a second
