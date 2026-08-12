@@ -107,7 +107,7 @@ describe("formatDateTime", () => {
     expect(formatDateTime(null)).toBe(EMPTY)
   })
 
-  it("formats a timestamp", () => {
-    expect(formatDateTime("2024-07-15T14:30:00")).toBe("Jul 15, 2024, 2:30 PM")
+  it("formats a timestamp in the business timezone", () => {
+    expect(formatDateTime("2024-07-15T21:30:00Z")).toBe("Jul 15, 2024, 2:30 PM")
   })
 })
