@@ -1,5 +1,5 @@
 import { expect, type Page } from "@playwright/test"
-import { createClient } from "@supabase/supabase-js"
+import { createClient, type SupabaseClient } from "@supabase/supabase-js"
 
 import type { Database } from "@/types/database.types"
 
@@ -40,6 +40,14 @@ export async function loginSupabaseAs(user: SeededUser) {
   const { error } = await client.auth.signInWithPassword(user)
   if (error) throw new Error(`sign in as ${user.email}: ${error.message}`)
   return client
+}
+
+// The signed-in user's id — unwrapped here so a dead session fails by name,
+// not as a null dereference in whichever query used the id.
+export async function currentUserId(client: SupabaseClient<Database>) {
+  const { data, error } = await client.auth.getUser()
+  if (error) throw new Error(`no session: ${error.message}`)
+  return data.user.id
 }
 
 /**

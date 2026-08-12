@@ -1,6 +1,7 @@
 import { expect, type Page, test } from "@playwright/test"
 
 import {
+  currentUserId,
   loginAs,
   loginSupabaseAs,
   MANAGER,
@@ -81,13 +82,11 @@ test.describe("page access", () => {
  */
 async function getAJobIdFromSalesPerson(user: SeededUser, ownedByThem: boolean) {
   const client = await loginSupabaseAs(user)
-  const {
-    data: { user: account },
-  } = await client.auth.getUser()
+  const accountId = await currentUserId(client)
 
   const query = client.from("jobs").select("id").order("id").limit(1)
   const { data, error } = await (
-    ownedByThem ? query.eq("salesperson_id", account!.id) : query.neq("salesperson_id", account!.id)
+    ownedByThem ? query.eq("salesperson_id", accountId) : query.neq("salesperson_id", accountId)
   ).single()
   if (error) throw new Error(`no ${ownedByThem ? "owned" : "unowned"} job: ${error.message}`)
   return data.id
