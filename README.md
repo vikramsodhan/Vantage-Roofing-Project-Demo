@@ -9,6 +9,10 @@ back-solves how much quoting activity is needed to hit a revenue target.
 
 Designed, built, and shipped solo — schema, auth model, test suite, and CI.
 
+> **A note on the commit history.** This repo is a public snapshot, squashed from the private
+> production repository once the app was already running. The incremental history — branches,
+> pull requests, and review — lives there. What you see here is the code, not the archaeology.
+
 ### **[▶ Open the live demo](https://vantage-roofing-project-demo.vercel.app)**
 
 No signup. Pick a role at the door — **Owner**, **Manager**, or **Salesperson** — and the app changes
