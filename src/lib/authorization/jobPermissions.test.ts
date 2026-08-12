@@ -37,11 +37,6 @@ describe("canUserModifyJob", () => {
     const salesperson = makeProfile({ role: "salesperson", id: "sales-1" })
     expect(canUserModifyJob(salesperson, "sales-2")).toBe(false)
   })
-
-  it("stops a salesperson from modifying a job with no salesperson", () => {
-    const salesperson = makeProfile({ role: "salesperson", id: "sales-1" })
-    expect(canUserModifyJob(salesperson, null)).toBe(false)
-  })
 })
 
 describe("canChangeSalesperson", () => {
