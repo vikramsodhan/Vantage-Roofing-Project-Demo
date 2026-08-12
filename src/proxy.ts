@@ -5,8 +5,12 @@ import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL } from "@/lib/env"
 
 /**
  * Route protection via session validation. Runs on every request before pages/routes.
- * Refreshes session tokens, redirects unauthenticated users to /login, signs out
- * deactivated users. See docs/DESIGN.md: "Auth & session model".
+ * Refreshes session tokens and redirects unauthenticated users to /login.
+ *
+ * Deactivation is deliberately NOT handled here — this only knows whether a session
+ * exists, not whether the account behind it is still active. That check lives in
+ * requireActiveProfile() on the server components and in the RLS policies, both of
+ * which read is_active. See docs/DESIGN.md: "Auth & session model".
  */
 export async function proxy(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request })
